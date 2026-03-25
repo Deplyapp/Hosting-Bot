@@ -4,6 +4,18 @@ A Telegram bot that lets users deploy and manage live projects directly from a c
 
 ---
 
+## Pre-built Docker Image
+
+The image is automatically built and published to GitHub Container Registry on every push to `main`. No local build required.
+
+```
+ghcr.io/deplyapp/hosting-bot:latest
+```
+
+Use this image URL directly in Koyeb, Render, or any Docker host.
+
+---
+
 ## Features
 
 - **One-tap deploy** — send a file or `.zip` and the bot detects the type and runs it
@@ -34,29 +46,33 @@ A Telegram bot that lets users deploy and manage live projects directly from a c
 | Runtime | `tsx` (runs TypeScript directly) |
 | Package manager | `pnpm` (monorepo) |
 | Container | Docker |
+| CI/CD | GitHub Actions → GitHub Container Registry |
 
 ---
 
 ## Project Structure
 
 ```
-├── Dockerfile              # Single Dockerfile for both bot and API (SERVICE env var switches)
-├── docker-compose.yml      # Run both services locally
-├── render.yaml             # One-click Render.com deployment
+├── Dockerfile                        # Single image for both bot and API
+├── docker-compose.yml                # Run both services locally
+├── render.yaml                       # One-click Render.com deployment
+├── .github/
+│   └── workflows/
+│       └── docker-publish.yml        # Auto-build & push image on every push to main
 ├── artifacts/
-│   ├── tg-bot/             # Telegram bot
+│   ├── tg-bot/                       # Telegram bot
 │   │   └── src/
-│   │       ├── index.ts    # Bot logic, commands, inline menus
-│   │       ├── runner.ts   # Process manager (start/stop/logs/ports)
-│   │       └── database.ts # PostgreSQL queries
-│   └── api-server/         # Express REST API (optional companion)
+│   │       ├── index.ts              # Bot logic, commands, inline menus
+│   │       ├── runner.ts             # Process manager (start/stop/logs/ports)
+│   │       └── database.ts          # PostgreSQL queries
+│   └── api-server/                   # Express REST API (optional companion)
 │       └── src/
 │           ├── app.ts
 │           └── index.ts
 └── lib/
-    ├── db/                 # Shared Drizzle ORM schema
-    ├── api-zod/            # Zod-validated API types
-    └── api-spec/           # OpenAPI spec
+    ├── db/                           # Shared Drizzle ORM schema
+    ├── api-zod/                      # Zod-validated API types
+    └── api-spec/                     # OpenAPI spec
 ```
 
 ---
@@ -72,7 +88,67 @@ A Telegram bot that lets users deploy and manage live projects directly from a c
 
 ---
 
-## Local Setup
+## Deploy with Pre-built Image (Recommended)
+
+The Docker image is already built and ready at:
+
+```
+ghcr.io/deplyapp/hosting-bot:latest
+```
+
+> If you get a pull error, go to `https://github.com/Deplyapp/Hosting-Bot/pkgs/container/hosting-bot` → **Package settings** → **Change visibility** → **Public**
+
+---
+
+### Deploy to Koyeb
+
+Create **two services**, both using the same image URL:
+
+1. Go to [koyeb.com](https://koyeb.com) → **Create Service** → **Docker**
+2. Set image to `ghcr.io/deplyapp/hosting-bot:latest`
+3. Repeat for both services:
+
+| Service name | `SERVICE` | Additional env vars |
+|---|---|---|
+| `hosting-bot` | `bot` | `TELEGRAM_BOT_TOKEN`, `DATABASE_URL` |
+| `hosting-api` | `api` | `DATABASE_URL`, `PORT=8080` |
+
+4. Click Deploy — done, no build step needed
+
+---
+
+### Deploy to Render
+
+The `render.yaml` in this repo is pre-configured to pull from the published image.
+
+1. Go to [render.com](https://render.com) → **New** → **Blueprint**
+2. Connect the `Deplyapp/Hosting-Bot` GitHub repo
+3. Render reads `render.yaml` and creates both services automatically
+4. Add the secret environment variables in the Render dashboard:
+   - `TELEGRAM_BOT_TOKEN`
+   - `DATABASE_URL` (use [Neon](https://neon.tech), [Supabase](https://supabase.com), or Render's managed PostgreSQL)
+5. Deploy — Render pulls the pre-built image directly, no build time
+
+> The bot runs as a **Background Worker**, the API as a **Web Service**. Both use the same image switched by the `SERVICE` variable.
+
+---
+
+## How the Image is Built (CI/CD)
+
+Every push to the `main` branch triggers a GitHub Actions workflow that:
+
+1. Builds the Docker image from `Dockerfile`
+2. Pushes it to GitHub Container Registry with two tags:
+   - `ghcr.io/deplyapp/hosting-bot:latest`
+   - `ghcr.io/deplyapp/hosting-bot:sha-<commit>`
+
+You can watch builds at: `https://github.com/Deplyapp/Hosting-Bot/actions`
+
+Koyeb and Render can be configured to auto-redeploy when a new image is pushed.
+
+---
+
+## Local Setup (Without Docker)
 
 ### Prerequisites
 
@@ -102,63 +178,36 @@ pnpm start
 
 ---
 
-## Docker Setup (Local)
+## Local Setup (With Docker)
 
 ```bash
 # Copy and fill in your environment variables
 cp .env.example .env
 
-# Run both the bot and API
+# Pull the pre-built image and run both services
+docker compose up
+
+# Or build locally and run
 docker compose up --build
 
-# Or run just the bot
-docker compose up bot --build
+# Run just the bot
+docker compose up bot
 
-# Or run just the API
-docker compose up api --build
+# Run just the API
+docker compose up api
 ```
 
-The single `Dockerfile` handles both services. The `SERVICE` environment variable controls which one runs:
+Or run manually with the pre-built image:
 
 ```bash
-# Build once
-docker build -t hosting-bot .
-
 # Run as bot
-docker run -e SERVICE=bot -e TELEGRAM_BOT_TOKEN=... -e DATABASE_URL=... hosting-bot
+docker run -e SERVICE=bot -e TELEGRAM_BOT_TOKEN=... -e DATABASE_URL=... \
+  ghcr.io/deplyapp/hosting-bot:latest
 
 # Run as API server
-docker run -e SERVICE=api -e PORT=8080 -e DATABASE_URL=... -p 8080:8080 hosting-bot
+docker run -e SERVICE=api -e PORT=8080 -e DATABASE_URL=... -p 8080:8080 \
+  ghcr.io/deplyapp/hosting-bot:latest
 ```
-
----
-
-## Deploy to Render
-
-1. Push this repo to GitHub
-2. Go to [render.com](https://render.com) → **New** → **Blueprint**
-3. Connect your GitHub repo — Render will read `render.yaml` and create both services automatically
-4. Set the secret environment variables in the Render dashboard:
-   - `TELEGRAM_BOT_TOKEN`
-   - `DATABASE_URL` (use Render's managed PostgreSQL or an external provider like [Neon](https://neon.tech))
-5. Deploy
-
-> The bot runs as a **Background Worker** and the API runs as a **Web Service** — both use the same Docker image, switched by the `SERVICE` variable.
-
----
-
-## Deploy to Koyeb
-
-1. Go to [koyeb.com](https://koyeb.com) → **Create Service** → **GitHub**
-2. Select this repo and set **Dockerfile path** to `./Dockerfile`
-3. Create **two services**:
-
-   | Service name | SERVICE | Extra env vars |
-   |---|---|---|
-   | `tg-bot` | `bot` | `TELEGRAM_BOT_TOKEN`, `DATABASE_URL` |
-   | `api-server` | `api` | `DATABASE_URL`, `PORT=8080` |
-
-4. Deploy both services
 
 ---
 
@@ -169,14 +218,14 @@ All navigation is done through inline buttons. Start the bot with `/start`.
 | Button | Action |
 |---|---|
 | 🚀 Deploy New Project | Upload a file to deploy |
-| 📋 My Projects | List all your projects |
+| 📋 My Projects | List all your projects with live status |
 | ▶️ Start | Start a stopped project |
 | ⏹️ Stop | Stop a running project |
 | 🔄 Restart | Restart a project (picks up new env vars) |
 | 📋 Logs | View the last 300 lines of output |
 | 🔑 Env Vars | Add, update, or remove environment variables |
 | ⌨️ Send Command | Send a line of text to the process stdin |
-| 🗑️ Delete | Remove the project and its files |
+| 🗑️ Delete | Remove the project and its files permanently |
 
 ---
 
