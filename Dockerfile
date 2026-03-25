@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
+RUN npm install -g tsx
+
 FROM base AS deps
 WORKDIR /app
 
@@ -54,5 +56,5 @@ CMD sh -c '\
   if [ "$SERVICE" = "api" ]; then \
     exec node --enable-source-maps /app/artifacts/api-server/dist/index.mjs; \
   else \
-    exec node_modules/.bin/tsx artifacts/tg-bot/src/index.ts; \
+    exec tsx /app/artifacts/tg-bot/src/index.ts; \
   fi'
