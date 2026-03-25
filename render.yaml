@@ -1,11 +1,9 @@
 services:
   - type: web
-    name: api-server
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
-    dockerBuildArgs:
-      SERVICE: api
+    name: hosting-bot-api
+    runtime: image
+    image:
+      url: ghcr.io/deplyapp/hosting-bot:latest
     envVars:
       - key: SERVICE
         value: api
@@ -18,16 +16,14 @@ services:
     healthCheckPath: /health
 
   - type: worker
-    name: tg-bot
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
-    dockerBuildArgs:
-      SERVICE: bot
+    name: hosting-bot-tg
+    runtime: image
+    image:
+      url: ghcr.io/deplyapp/hosting-bot:latest
     envVars:
       - key: SERVICE
         value: bot
-      - key: BOT_TOKEN
+      - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: DATABASE_URL
         sync: false
