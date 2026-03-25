@@ -8,11 +8,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN npm install -g tsx
 
-# ─── Bot: install deps with plain npm (no pnpm workspace needed) ─────────────
+# ─── Bot: install deps with plain npm using clean package.json ────────────────
 FROM base AS bot-deps
 WORKDIR /bot
-COPY artifacts/tg-bot/package.json ./
-RUN npm install --omit=dev
+RUN echo '{ \
+  "name": "tg-bot", \
+  "version": "1.0.0", \
+  "type": "module", \
+  "dependencies": { \
+    "telegraf": "^4.16.3", \
+    "pg": "^8.20.0", \
+    "axios": "^1.9.0", \
+    "adm-zip": "^0.5.16", \
+    "uuid": "^11.1.0" \
+  } \
+}' > package.json
+RUN npm install
 
 # ─── API: install deps + build with pnpm ─────────────────────────────────────
 FROM base AS api-build
@@ -22,9 +33,9 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY lib/db/package.json           ./lib/db/
-COPY lib/api-spec/package.json     ./lib/api-spec/
-COPY lib/api-zod/package.json      ./lib/api-zod/
+COPY lib/db/package.json               ./lib/db/
+COPY lib/api-spec/package.json         ./lib/api-spec/
+COPY lib/api-zod/package.json          ./lib/api-zod/
 COPY lib/api-client-react/package.json ./lib/api-client-react/
 COPY artifacts/api-server/package.json ./artifacts/api-server/
 COPY artifacts/tg-bot/package.json     ./artifacts/tg-bot/
@@ -41,13 +52,11 @@ RUN pnpm --filter @workspace/api-server build
 FROM base AS runner
 ARG SERVICE=bot
 
-# Bot files
 WORKDIR /bot
 COPY --from=bot-deps /bot/node_modules ./node_modules
-COPY artifacts/tg-bot/src ./src
+COPY artifacts/tg-bot/src              ./src
 RUN mkdir -p /projects
 
-# API files (esbuild bundles everything, dist is self-contained)
 COPY --from=api-build /app/artifacts/api-server/dist /api/dist
 
 ENV NODE_ENV=production
