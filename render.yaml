@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: api-server
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerBuildArgs:
+      SERVICE: api
+    envVars:
+      - key: SERVICE
+        value: api
+      - key: PORT
+        value: 8080
+      - key: DATABASE_URL
+        sync: false
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /health
+
+  - type: worker
+    name: tg-bot
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerBuildArgs:
+      SERVICE: bot
+    envVars:
+      - key: SERVICE
+        value: bot
+      - key: BOT_TOKEN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: NODE_ENV
+        value: production
